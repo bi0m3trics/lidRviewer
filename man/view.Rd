@@ -2,27 +2,55 @@
 % Please edit documentation in R/plot.R
 \name{view}
 \alias{view}
-\title{Display big 3D point clouds}
+\title{Display big 3D point clouds with optional polygon overlay}
 \usage{
-view(x, ...)
+view(
+  x,
+  polygons = NULL,
+  dem = NULL,
+  density = 1,
+  color_by = NULL,
+  palette = NULL,
+  point_size = 3,
+  line_width = 2,
+  default_color = "#FFFFFF",
+  ...
+)
 }
 \arguments{
-\item{x}{a point cloud with minimally 3 columns named X,Y,Z}
+\item{x}{a point cloud with minimally 3 columns named X,Y,Z, or an sf object}
 
-\item{...}{Support detach = TRUE}
+\item{polygons}{optional sf object with geometries to overlay (when x is a LAS object)}
+
+\item{dem}{SpatRaster object to extract Z values from (required when x is sf or for polygons)}
+
+\item{density}{numeric. Point density for line sampling. Default is 1.}
+
+\item{color_by}{character. Column name to color by (for sf objects)}
+
+\item{palette}{color vector or function for color mapping}
+
+\item{point_size}{numeric. Size for POINT geometries. Default is 3.}
+
+\item{line_width}{numeric. Width for lines/polygon outlines. Default is 2.}
+
+\item{default_color}{character. Default color when no color_by specified. Default "#FFFFFF".}
+
+\item{...}{Additional arguments including detach = TRUE for non-blocking mode}
 }
 \description{
-Display arbitrary large in memory 3D point clouds from the lidR package. Keyboard can be use
-to control the rendering
-\itemize{
-\item Rotate with left mouse button
-\item Zoom with mouse wheel
-\item Pan with right mouse button
-\item Keyboard \if{html}{\out{<kbd>}}r\if{html}{\out{</kbd>}} or \if{html}{\out{<kbd>}}g\if{html}{\out{</kbd>}} or \if{html}{\out{<kbd>}}b\if{html}{\out{</kbd>}} to color with RGB
-\item Keyboard \if{html}{\out{<kbd>}}z\if{html}{\out{</kbd>}} to color with Z
-\item Keyboard \if{html}{\out{<kbd>}}i\if{html}{\out{</kbd>}} to color with Intensity
-\item Keyboard \if{html}{\out{<kbd>}}c\if{html}{\out{</kbd>}} to color with Classification
-\item Keyboard \if{html}{\out{<kbd>}}+\if{html}{\out{</kbd>}} or \if{html}{\out{<kbd>}}-\if{html}{\out{</kbd>}} to change the point size
-\item Keyboard \if{html}{\out{<kbd>}}l\if{html}{\out{</kbd>}} to enable/disable eyes-dome lightning
+Enhanced view function supporting both LAS point clouds and sf objects with
+optional color-by-attribute functionality and custom styling parameters.
+}
+\examples{
+\dontrun{
+# View LAS point cloud only
+view(las)
+
+# View sf polygons with color-by-attribute
+view(metrics, dem = dem, color_by = "treeID", palette = rainbow(10))
+
+# View LAS + sf with custom colors
+view(las, polygons = metrics, dem = dem, color_by = "Z", palette = heat.colors)
 }
 }

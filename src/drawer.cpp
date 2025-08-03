@@ -99,6 +99,33 @@ Drawer::Drawer(SDL_Window *window, DataFrame df, std::string hnof)
   this->x = df["X"];
   this->y = df["Y"];
   this->z = df["Z"];
+  
+  // Check if this is line data (has LINE_ID column) or point data
+  this->has_line_data = false;
+  this->has_point_data = false;
+  
+  if (df.containsElementNamed("LINE_ID")) {
+    this->line_id = df["LINE_ID"];
+    // Check what type of data we have
+    for (int i = 0; i < line_id.size(); i++) {
+      if (Rcpp::NumericVector::is_na(line_id[i])) {
+        this->has_point_data = true;
+      } else {
+        this->has_line_data = true;
+      }
+    }
+  } else {
+    this->has_point_data = true;
+  }
+  
+  // Set render mode based on what data we have
+  if (this->has_line_data && this->has_point_data) {
+    this->render_mode = RenderMode::RENDER_MIXED;
+  } else if (this->has_line_data) {
+    this->render_mode = RenderMode::RENDER_LINES;
+  } else {
+    this->render_mode = RenderMode::RENDER_POINTS;
+  }
 
   this->npoints = x.length();
 
@@ -287,50 +314,17 @@ bool Drawer::draw()
   auto end_query = std::chrono::high_resolution_clock::now();
   auto start_rendering = std::chrono::high_resolution_clock::now();
 
-  glBegin(GL_POINTS);
-
-  for (auto i : pp)
-  {
-    float px = x[i]-xcenter;
-    float py = y[i]-ycenter;
-    float pz = z[i]-zcenter;
-
-    switch (attr)
-    {
-      case Attribute::Z:
-      {
-        float nz = (std::clamp(z[i], minattr, maxattr) - minattr) / (attrrange);
-        int bin = std::min(static_cast<int>(nz * (zgradient.size() - 1)), static_cast<int>(zgradient.size() - 1));
-        auto& col = zgradient[bin];
-        glColor3ub(col[0], col[1], col[2]);
-        break;
-      }
-      case Attribute::RGB:
-      {
-        glColor3ub(r[i]/rgb_norm, g[i]/rgb_norm, b[i]/rgb_norm);
-        break;
-      }
-      case Attribute::CLASS:
-      {
-        int classification = std::clamp(attri[i], 0, 19);
-        auto& col = classcolor[classification];
-        glColor3ub(col[0], col[1], col[2]);
-        break;
-      }
-      case Attribute::I:
-      {
-        float ni = (std::clamp(attri[i], (int)minattr, (int)maxattr) - (int)minattr) / (attrrange);
-        int bin = std::min(static_cast<int>(ni * (igradient.size() - 1)), static_cast<int>(igradient.size() - 1));
-        auto& col = igradient[bin];
-        glColor3ub(col[0], col[1], col[2]);
-        break;
-      }
-    }
-
-    glVertex3d(px, py, pz);
+  if (render_mode == RenderMode::RENDER_LINES) {
+    // Render lines only
+    draw_lines();
+  } else if (render_mode == RenderMode::RENDER_MIXED) {
+    // Render both points and lines
+    draw_points();  // Draw points first (LAS data)
+    draw_lines();   // Draw lines on top (polygons)
+  } else {
+    // Render points only (original behavior)
+    draw_points();
   }
-
-  glEnd();
 
   if (lightning) edl();
 
@@ -587,4 +581,111 @@ void Drawer::query_rendered_point()
 void Drawer::setPointSize(float size)
 {
   if (size > 0) this->point_size = size;
+}
+
+void Drawer::draw_points()
+{
+  glBegin(GL_POINTS);
+
+  for (auto i : pp)
+  {
+    // In mixed mode, skip points that have valid line_id (they'll be rendered as lines)
+    if (render_mode == RenderMode::RENDER_MIXED && 
+        has_line_data && 
+        !Rcpp::NumericVector::is_na(line_id[i])) {
+      continue;
+    }
+    
+    float px = x[i]-xcenter;
+    float py = y[i]-ycenter;
+    float pz = z[i]-zcenter;
+
+    switch (attr)
+    {
+      case Attribute::Z:
+      {
+        float nz = (std::clamp(z[i], minattr, maxattr) - minattr) / (attrrange);
+        int bin = std::min(static_cast<int>(nz * (zgradient.size() - 1)), static_cast<int>(zgradient.size() - 1));
+        auto& col = zgradient[bin];
+        glColor3ub(col[0], col[1], col[2]);
+        break;
+      }
+      case Attribute::RGB:
+      {
+        glColor3ub(r[i]/rgb_norm, g[i]/rgb_norm, b[i]/rgb_norm);
+        break;
+      }
+      case Attribute::CLASS:
+      {
+        int classification = std::clamp(attri[i], 0, 19);
+        auto& col = classcolor[classification];
+        glColor3ub(col[0], col[1], col[2]);
+        break;
+      }
+      case Attribute::I:
+      {
+        float ni = (std::clamp(attri[i], (int)minattr, (int)maxattr) - (int)minattr) / (attrrange);
+        int bin = std::min(static_cast<int>(ni * (igradient.size() - 1)), static_cast<int>(igradient.size() - 1));
+        auto& col = igradient[bin];
+        glColor3ub(col[0], col[1], col[2]);
+        break;
+      }
+    }
+
+    glVertex3d(px, py, pz);
+  }
+
+  glEnd();
+}
+
+void Drawer::draw_lines()
+{
+  // Group points by line_id and render as line strips
+  std::map<int, std::vector<int>> line_groups;
+  
+  // Group points by their line_id (skip NA values)
+  for (auto i : pp)
+  {
+    if (!Rcpp::NumericVector::is_na(line_id[i])) {
+      int line_id_val = (int)line_id[i];  // Convert numeric to int
+      line_groups[line_id_val].push_back(i);
+    }
+  }
+  
+  // Render each line group
+  for (const auto& line_group : line_groups)
+  {
+    const std::vector<int>& line_points = line_group.second;
+    
+    if (line_points.size() < 2) continue; // Need at least 2 points for a line
+    
+    glBegin(GL_LINE_STRIP);
+    
+    for (auto i : line_points)
+    {
+      float px = x[i]-xcenter;
+      float py = y[i]-ycenter;
+      float pz = z[i]-zcenter;
+
+      // For lines, typically use RGB color (white for polygon outlines)
+      switch (attr)
+      {
+        case Attribute::RGB:
+        {
+          glColor3ub(r[i]/rgb_norm, g[i]/rgb_norm, b[i]/rgb_norm);
+          break;
+        }
+        default:
+        {
+          // Default to white for lines
+          glColor3ub(255, 255, 255);
+          break;
+        }
+      }
+
+      glVertex3d(px, py, pz);
+    }
+    
+    glEnd();
+  }
 }

@@ -8,10 +8,11 @@ Description: An advanced point cloud viewer designed to fluidly display hundreds
   points while using minimal memory. This package is intended as a replacement for rgl in lidR 
   when the point cloud size exceeds what rgl can handle.
 Depends: R (>= 3.1.0)
-Imports: Rcpp,lidR,methods
+Imports: Rcpp,lidR,methods,sf,terra,RColorBrewer,grDevices
+Suggests: geometry
 License: GPL-3
 Encoding: UTF-8
 LazyData: true
 LinkingTo: Rcpp
-RoxygenNote: 7.3.1
+RoxygenNote: 7.3.2
 SystemRequirements: GLU, OpenGL, SDL2
