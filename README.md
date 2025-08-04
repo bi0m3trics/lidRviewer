@@ -6,7 +6,7 @@ This is a point cloud viewer for R. The primary goal of this package is to serve
 
 While `rgl` is a powerful package, it has some limitations when it comes to handling large point clouds. The `lidRviewer` package is designed to efficiently display arbitrarily large in-memory point clouds, with tested cases including over 880 million points.
 
-![](man/figures/autzen-screen.jpg)
+<img width="2028" height="700" alt="image" src="https://github.com/user-attachments/assets/316e6c1d-a86a-4b14-a29d-823e498b255a" />
 
 ### Advantages of `lidRviewer`:
 
@@ -45,23 +45,46 @@ view(las)
 # Close the view to continue working in your R session
 ```
 
-### 3D Polygon Visualization (NEW)
+### 3D Polygon Visualization (NEW - what I've added)
 
-You can now visualize sf polygon objects in 3D by extracting Z values from a SpatRaster DEM:
+You can now visualize sf polygon objects in 3D by extracting Z values from a SpatRaster DEM and you can colorize the las by any attribute:
+
+<img width="1296" height="700" alt="image" src="https://github.com/user-attachments/assets/39357898-4f31-4135-8c25-3b55a62ccb7c" />
 
 ```r
 library(lidRviewer)
+library(lidR
 library(sf)
 library(terra)
 
-# Using the view function with sf polygons
-view(polygons, dem = dem_raster)
+LASfile <- system.file("extdata", "MixedConifer.laz", package="lidR")
+las <- readLAS(LASfile, select = "xyz"
+las <- classify_ground(las, csf())
+dem <- rasterize_terrain(las, tin(), res=1)
+las<-normalize_height(las, tin())
+chm <- rasterize_canopy(las, 0.5, p2r(0.3))
+ttops <- locate_trees(chm, lmf(4, 2))
+las <- segment_trees(las, dalponte2016(chm, ttops))
+metrics <- crown_metrics(las, .stdtreemetrics, geom = "convex")
 
-# Or using the dedicated plot_xyz_poly function
-plot_xyz_poly(polygons, dem_raster, density = 1)
+# ===================================================
+# NEW APPROACH: Separate LAS and SF coloring
+# ===================================================
+# 1. Color the LAS data separately using colorizeLAS
+las_by_height <- colorizeLAS(las, "Z", lidR::height.colors)
+las_by_trees <- colorizeLAS(las, "treeID", function(n) random.colors(500))
 
-# With custom sampling density for smoother outlines
-plot_xyz_poly(polygons, dem_raster, density = 2)
+# 2. Use the new sf_objects + sf_styling approach for multiple SF objects
+view(las_by_height,
+     sf_objects = list(
+       polygons = metrics,
+       points = ttops
+     ),
+     sf_styling = list(
+       polygons = list(color_by = "treeID", palette = rainbow(50)),
+       points = list(color_by = "Z", palette = "#FFFFFF")
+     ),
+     dem = dem)
 ```
 
 The polygons will be displayed as white wireframes in 3D space, with Z coordinates extracted from the provided DEM at polygon vertex locations.
